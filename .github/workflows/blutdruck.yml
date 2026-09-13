@@ -29,6 +29,14 @@ jobs:
           echo "$WITHINGS_USER_JSON" | base64 --decode > "$HOME/.withings_user.json"
           chmod 600 "$HOME/.withings_user.json"
 
+      - name: Restore Garmin session
+        env:
+          GARMIN_SESSION: ${{ secrets.GARMIN_SESSION }}
+        run: |
+          echo "$GARMIN_SESSION" | base64 --decode | tar -xzf - -C "$HOME"
+          chmod 700 "$HOME/.garmin_session"
+          chmod 600 "$HOME/.garmin_session/"*.json
+
       - name: Run Sync
         env:
           GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
