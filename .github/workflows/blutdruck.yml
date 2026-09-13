@@ -8,6 +8,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,6 +22,13 @@ jobs:
         run: |
           pip install withings-sync
 
+      - name: Restore Withings authentication
+        env:
+          WITHINGS_USER_JSON: ${{ secrets.WITHINGS_USER_JSON }}
+        run: |
+          echo "$WITHINGS_USER_JSON" | base64 --decode > "$HOME/.withings_user.json"
+          chmod 600 "$HOME/.withings_user.json"
+
       - name: Run Sync
         env:
           GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
@@ -28,4 +36,4 @@ jobs:
           WITHINGS_CLIENT_ID: ${{ secrets.WITHINGS_CLIENT_ID }}
           WITHINGS_CLIENT_SECRET: ${{ secrets.WITHINGS_CLIENT_SECRET }}
         run: |
-          withings-sync
+          withings-sync --features BLOOD_PRESSURE
