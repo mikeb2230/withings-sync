@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install withings-sync
+          pip install withings-sync==4.2.7
 
       - name: Restore Withings authentication
         env:
@@ -31,9 +31,9 @@ jobs:
 
       - name: Restore Garmin session
         env:
-          GARMIN_SESSION: ${{ secrets.GARMIN_SESSION }}
+          GARMIN_SESSION_B64: ${{ secrets.GARMIN_SESSION }}
         run: |
-          echo "$GARMIN_SESSION" | base64 --decode | tar -xzf - -C "$HOME"
+          echo "$GARMIN_SESSION_B64" | base64 --decode | tar -xzf - -C "$HOME"
           chmod 700 "$HOME/.garmin_session"
           chmod 600 "$HOME/.garmin_session/"*.json
 
@@ -44,4 +44,24 @@ jobs:
           WITHINGS_CLIENT_ID: ${{ secrets.WITHINGS_CLIENT_ID }}
           WITHINGS_CLIENT_SECRET: ${{ secrets.WITHINGS_CLIENT_SECRET }}
         run: |
-          withings-sync --features BLOOD_PRESSURE
+          set -o pipefail
+          withings-sync --features BLOOD_PRESSURE 2>&1 | tee sync.log
+
+          if grep -q "Received error code:" sync.log; then
+            echo "Withings API returned an error."
+            exit 1
+          fi
+
+      - name: Save updated Withings authentication
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_UPDATE_TOKEN }}
+        run: |
+          base64 -w 0 "$HOME/.withings_user.json" | \
+            gh secret set WITHINGS_USER_JSON --repo "${{ github.repository }}"
+
+      - name: Save updated Garmin session
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_UPDATE_TOKEN }}
+        run: |
+          tar -czf - -C "$HOME" .garmin_session | base64 -w 0 | \
+            gh secret set GARMIN_SESSION --repo "${{ github.repository }}"
