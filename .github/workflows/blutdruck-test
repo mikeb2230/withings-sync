@@ -1,0 +1,31 @@
+name: TEST Withings to Garmin v6
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install withings-sync 6.0.2
+        run: |
+          python -m pip install --upgrade pip
+          pip install withings-sync==6.0.2
+
+      - name: Show installed version
+        run: |
+          pip show withings-sync
+
+      - name: Test installation
+        run: |
+          which withings-sync
+          withings-sync --help
