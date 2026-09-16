@@ -3,7 +3,7 @@ name: Sync Withings to Garmin
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '17 2,8,14,20 * * *'
 
 jobs:
   sync:
@@ -29,6 +29,9 @@ jobs:
           echo "$WITHINGS_USER_JSON" | base64 --decode > "$HOME/.withings_user.json"
           chmod 600 "$HOME/.withings_user.json"
 
+          # Sicherheitskopie des letzten funktionierenden Zustands
+          cp "$HOME/.withings_user.json" "$HOME/.withings_user.backup.json"
+
       - name: Restore Garmin session
         env:
           GARMIN_SESSION_B64: ${{ secrets.GARMIN_SESSION }}
@@ -38,6 +41,7 @@ jobs:
           chmod 600 "$HOME/.garmin_session/"*.json
 
       - name: Run Sync
+        id: withings_sync
         env:
           GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
@@ -45,14 +49,49 @@ jobs:
           WITHINGS_CLIENT_SECRET: ${{ secrets.WITHINGS_CLIENT_SECRET }}
         run: |
           set -o pipefail
+
           withings-sync --features BLOOD_PRESSURE 2>&1 | tee sync.log
 
+          # Withings-API-Fehler niemals als neuen Auth-Zustand speichern
           if grep -q "Received error code:" sync.log; then
             echo "Withings API returned an error."
+            echo "Restoring previous Withings authentication."
+            cp "$HOME/.withings_user.backup.json" "$HOME/.withings_user.json"
             exit 1
           fi
 
+      - name: Validate Withings authentication
+        if: success()
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          path = os.path.expanduser("~/.withings_user.json")
+
+          try:
+              with open(path, "r") as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f"Invalid Withings authentication file: {e}")
+              sys.exit(1)
+
+          if not isinstance(data, dict):
+              print("Withings authentication file is not a JSON object.")
+              sys.exit(1)
+
+          # Keine beschädigten/null Tokenwerte akzeptieren
+          for key, value in data.items():
+              if "token" in key.lower() and value is None:
+                  print(f"Invalid Withings token value detected: {key}")
+                  sys.exit(1)
+
+          print("Withings authentication file looks valid.")
+          PY
+
       - name: Save updated Withings authentication
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.SECRET_UPDATE_TOKEN }}
         run: |
@@ -60,6 +99,7 @@ jobs:
             gh secret set WITHINGS_USER_JSON --repo "${{ github.repository }}"
 
       - name: Save updated Garmin session
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.SECRET_UPDATE_TOKEN }}
         run: |
